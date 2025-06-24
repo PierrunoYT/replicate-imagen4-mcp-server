@@ -9,7 +9,7 @@ A Model Context Protocol (MCP) server that provides access to Google's Imagen 4 
 
 **🔗 Repository**: [https://github.com/PierrunoYT/replicate-imagen4-mcp-server](https://github.com/PierrunoYT/replicate-imagen4-mcp-server)
 
-> **🚀 Ready to use!** Pre-built executable included - no compilation required.
+> **🚀 Ready to use!** Works everywhere with npx - no local installation required.
 
 ## Features
 
@@ -19,8 +19,10 @@ A Model Context Protocol (MCP) server that provides access to Google's Imagen 4 
 - **Safety Filtering**: Configurable content safety levels
 - **File Saving**: Generate and save images directly to disk
 - **Prediction Tracking**: Check status of running predictions
+- **Portable Installation**: Works anywhere with npx + GitHub
+- **Robust Error Handling**: Graceful handling of missing tokens and API errors
+- **Connection Stability**: No more unexpected disconnections or crashes
 - **Detailed Responses**: Returns image URLs, metadata, and generation details
-- **Error Handling**: Comprehensive error reporting and logging
 
 ## Prerequisites
 
@@ -28,6 +30,37 @@ A Model Context Protocol (MCP) server that provides access to Google's Imagen 4 
 - Replicate API token
 
 ## Installation
+
+### Option 1: Portable Installation (Recommended)
+
+The easiest way to use this MCP server is with npx, which works anywhere without local installation:
+
+```json
+{
+  "mcpServers": {
+    "replicate-imagen4": {
+      "command": "npx",
+      "args": ["-y", "https://github.com/PierrunoYT/replicate-imagen4-mcp-server.git"],
+      "env": {
+        "REPLICATE_API_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+### Option 2: Local Installation
+
+For local development or if you prefer to clone the repository:
+
+```bash
+git clone https://github.com/PierrunoYT/replicate-imagen4-mcp-server.git
+cd replicate-imagen4-mcp-server
+npm install
+npm run build
+```
+
+## Setup
 
 ### 1. Get your Replicate API Token
 
@@ -48,6 +81,17 @@ Or create a `.env` file:
 
 ```
 REPLICATE_API_TOKEN=r8_NBY**********************************
+```
+
+## Recent Improvements
+
+### v2.0.0 - Enhanced Stability & Portability
+
+- **🔧 Fixed Connection Drops**: Resolved server crashes when API token is missing or invalid
+- **📦 Portable Installation**: Added npx support for installation-free usage from GitHub
+- **🛡️ Graceful Error Handling**: Server now handles errors gracefully without unexpected shutdowns
+- **⚡ Improved Reliability**: Enhanced connection stability and error recovery
+- **🌐 Universal Compatibility**: Works on any system with Node.js, no local setup required
 ```
 
 ### 3. Clone or Download
