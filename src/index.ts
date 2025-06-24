@@ -9,13 +9,20 @@ import { writeFile } from "fs/promises";
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 if (!REPLICATE_API_TOKEN) {
   console.error('REPLICATE_API_TOKEN environment variable is required');
-  process.exit(1);
+  console.error('Please set your Replicate API token: export REPLICATE_API_TOKEN=your_token_here');
 }
 
-// Configure Replicate client
-const replicate = new Replicate({
-  auth: REPLICATE_API_TOKEN
-});
+// Configure Replicate client (will be null if no token)
+let replicate: Replicate | null = null;
+if (REPLICATE_API_TOKEN) {
+  try {
+    replicate = new Replicate({
+      auth: REPLICATE_API_TOKEN
+    });
+  } catch (error) {
+    console.error('Failed to initialize Replicate client:', error);
+  }
+}
 
 // Define types based on Replicate API
 interface ReplicateImageResult {
@@ -64,14 +71,27 @@ server.tool(
     }
   },
   async (args: any) => {
-    const { 
-      prompt, 
-      aspect_ratio = "1:1", 
-      output_format = "jpg", 
-      safety_filter_level = "block_only_high" 
+    const {
+      prompt,
+      aspect_ratio = "1:1",
+      output_format = "jpg",
+      safety_filter_level = "block_only_high"
     } = args;
     
     try {
+      // Check if Replicate client is available
+      if (!replicate) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: REPLICATE_API_TOKEN environment variable is not set. Please configure your Replicate API token."
+            }
+          ],
+          isError: true
+        };
+      }
+
       console.error(`Generating image with prompt: "${prompt}"`);
 
       // Call Replicate Imagen 4 Ultra API
@@ -179,15 +199,28 @@ server.tool(
     }
   },
   async (args: any) => {
-    const { 
-      prompt, 
+    const {
+      prompt,
       filename = "output.jpg",
-      aspect_ratio = "1:1", 
-      output_format = "jpg", 
-      safety_filter_level = "block_only_high" 
+      aspect_ratio = "1:1",
+      output_format = "jpg",
+      safety_filter_level = "block_only_high"
     } = args;
     
     try {
+      // Check if Replicate client is available
+      if (!replicate) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: REPLICATE_API_TOKEN environment variable is not set. Please configure your Replicate API token."
+            }
+          ],
+          isError: true
+        };
+      }
+
       console.error(`Generating and saving image with prompt: "${prompt}"`);
 
       // Call Replicate Imagen 4 Ultra API
@@ -287,6 +320,19 @@ server.tool(
     const { prediction_id } = args;
     
     try {
+      // Check if Replicate client is available
+      if (!replicate) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: REPLICATE_API_TOKEN environment variable is not set. Please configure your Replicate API token."
+            }
+          ],
+          isError: true
+        };
+      }
+
       console.error(`Getting prediction status for: ${prediction_id}`);
 
       const prediction = await replicate.predictions.get(prediction_id);
@@ -340,9 +386,26 @@ ${prediction.logs ? `Logs: ${prediction.logs}` : ''}`;
 
 // Start the server
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Replicate Imagen 4 MCP server running on stdio');
+  try {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error('Replicate Imagen 4 MCP server running on stdio');
+    
+    // Handle graceful shutdown
+    process.on('SIGINT', () => {
+      console.error('Received SIGINT, shutting down gracefully...');
+      process.exit(0);
+    });
+    
+    process.on('SIGTERM', () => {
+      console.error('Received SIGTERM, shutting down gracefully...');
+      process.exit(0);
+    });
+    
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 }
 
 main().catch((error) => {
