@@ -14,10 +14,12 @@ A Model Context Protocol (MCP) server that provides access to Google's Imagen 4 
 ## Features
 
 - **High-Quality Image Generation**: Uses Google's Imagen 4 Ultra model via Replicate
+- **Automatic Image Download**: All generated images are automatically downloaded to local storage
+- **Organized File Management**: Images saved to dedicated 'images' directory with smart naming
 - **Multiple Aspect Ratios**: Support for 1:1, 16:9, 9:16, 3:4, and 4:3
 - **Multiple Output Formats**: JPG and PNG support
 - **Safety Filtering**: Configurable content safety levels
-- **File Saving**: Generate and save images directly to disk
+- **Dual Access**: Returns both local file paths and original URLs
 - **Prediction Tracking**: Check status of running predictions
 - **Portable Installation**: Works anywhere with npx + GitHub
 - **Robust Error Handling**: Graceful handling of missing tokens and API errors
@@ -83,7 +85,53 @@ Or create a `.env` file:
 REPLICATE_API_TOKEN=r8_NBY**********************************
 ```
 
+## Automatic Image Download
+
+### 📥 **How It Works**
+
+All generated images are automatically downloaded to your local machine for persistent storage and offline access:
+
+#### **1. Image Generation Flow**
+1. **API Call**: Server calls Replicate's Imagen 4 Ultra API
+2. **Response**: Replicate returns temporary URLs for generated images
+3. **Auto-Download**: Server immediately downloads images to local storage
+4. **Response**: Returns both local paths and original URLs
+
+#### **2. File Organization**
+
+**Directory Structure:**
+```
+your-project/
+├── images/                    # Auto-created directory
+│   ├── imagen4_mountain_landscape_1_2025-06-24T18-30-45-123Z.jpg
+│   ├── imagen4_cute_robot_1_2025-06-24T18-31-20-456Z.png
+│   └── ...
+```
+
+**Filename Format:**
+- **Prefix**: `imagen4_`
+- **Prompt**: First 50 chars, sanitized (alphanumeric + underscores)
+- **Index**: Image number (for multiple images)
+- **Timestamp**: ISO timestamp for uniqueness
+- **Extension**: `.jpg` or `.png` based on output format
+
+#### **3. Benefits**
+
+✅ **Persistent Storage**: Images saved locally, not just temporary URLs
+✅ **Offline Access**: View images without internet connection
+✅ **Organized Storage**: All images in dedicated `images` directory
+✅ **Unique Naming**: No filename conflicts with timestamp system
+✅ **Fallback Safety**: Original URLs provided if download fails
+
 ## Recent Improvements
+
+### v2.1.0 - Automatic Image Download
+
+- **📥 Auto-Download**: All generated images automatically downloaded to local storage
+- **📁 Smart Organization**: Images saved to dedicated 'images' directory with intelligent naming
+- **🔄 Dual Access**: Returns both local file paths and original URLs for maximum flexibility
+- **🛡️ Graceful Fallback**: Original URLs provided if download fails
+- **📝 Enhanced Responses**: Detailed information about local storage and download status
 
 ### v2.0.0 - Enhanced Stability & Portability
 
@@ -92,7 +140,6 @@ REPLICATE_API_TOKEN=r8_NBY**********************************
 - **🛡️ Graceful Error Handling**: Server now handles errors gracefully without unexpected shutdowns
 - **⚡ Improved Reliability**: Enhanced connection stability and error recovery
 - **🌐 Universal Compatibility**: Works on any system with Node.js, no local setup required
-```
 
 ### 3. Clone or Download
 
@@ -165,33 +212,43 @@ Add to your MCP settings file at:
 
 ### `imagen4_generate`
 
-Generate images using Imagen 4 Ultra.
+Generate images using Imagen 4 Ultra with automatic local download.
 
 **Parameters:**
 - `prompt` (required): Text prompt for image generation
-- `aspect_ratio` (optional): "1:1", "9:16", "16:9", "3:4", or "4:3" (default: "1:1")
-- `output_format` (optional): "jpg" or "png" (default: "jpg")
-- `safety_filter_level` (optional): "block_low_and_above", "block_medium_and_above", or "block_only_high" (default: "block_only_high")
-
-**Response includes:**
-- Image URL for immediate access
-- Generation metadata and settings
-
-### `imagen4_generate_and_save`
-
-Generate images using Imagen 4 Ultra and save them to a local file.
-
-**Parameters:**
-- `prompt` (required): Text prompt for image generation
-- `filename` (optional): Filename to save the image (default: "output.jpg")
 - `aspect_ratio` (optional): "1:1", "9:16", "16:9", "3:4", or "4:3" (default: "1:1")
 - `output_format` (optional): "jpg" or "png" (default: "jpg")
 - `safety_filter_level` (optional): "block_low_and_above", "block_medium_and_above", or "block_only_high" (default: "block_only_high")
 
 **Features:**
-- Downloads the generated image automatically
-- Saves to specified filename
-- Returns both URL and local file path
+- **Automatic Download**: Images automatically saved to local 'images' directory
+- **Smart Naming**: Generates descriptive filenames based on prompt and timestamp
+- **Dual Access**: Returns both local file paths and original URLs
+- **Error Resilience**: Graceful fallback if download fails
+
+**Response includes:**
+- Local file path for immediate access
+- Original image URL as backup
+- Generation metadata and settings
+- Download status information
+
+### `imagen4_generate_and_save`
+
+Generate images using Imagen 4 Ultra with custom filename support and automatic download.
+
+**Parameters:**
+- `prompt` (required): Text prompt for image generation
+- `filename` (optional): Custom filename for the first image (default: auto-generated)
+- `aspect_ratio` (optional): "1:1", "9:16", "16:9", "3:4", or "4:3" (default: "1:1")
+- `output_format` (optional): "jpg" or "png" (default: "jpg")
+- `safety_filter_level` (optional): "block_low_and_above", "block_medium_and_above", or "block_only_high" (default: "block_only_high")
+
+**Features:**
+- **Custom Naming**: Use your own filename for the first image
+- **Auto-Download**: All images automatically saved to 'images' directory
+- **Multiple Images**: Handles multiple generated images with smart naming
+- **Dual Access**: Returns both local file paths and original URLs
+- **Error Resilience**: Graceful fallback if download fails
 
 ### `imagen4_get_prediction`
 
@@ -373,6 +430,21 @@ MIT License - see [LICENSE](LICENSE) file for details.
 5. Submit a pull request
 
 ## Changelog
+
+### v2.1.0
+- **Automatic Image Download**: All generated images now automatically downloaded to local storage
+- **Smart File Organization**: Images saved to dedicated 'images' directory with intelligent naming
+- **Enhanced Responses**: Detailed information about local storage paths and download status
+- **Dual Access**: Returns both local file paths and original URLs for maximum flexibility
+- **Error Resilience**: Graceful fallback with original URLs if download fails
+- **Improved User Experience**: No manual download steps required
+
+### v2.0.0
+- Enhanced stability and portability
+- Fixed connection drops and server crashes
+- Added npx support for installation-free usage
+- Graceful error handling improvements
+- Enhanced connection stability and error recovery
 
 ### v1.0.0
 - Initial release with Replicate integration

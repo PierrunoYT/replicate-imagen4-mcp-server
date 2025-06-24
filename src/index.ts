@@ -4,6 +4,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import Replicate from "replicate";
 import { writeFile } from "fs/promises";
+import * as fs from "fs";
+import * as path from "path";
+import * as http from "http";
+import * as https from "https";
 
 // Check for required environment variable
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
@@ -28,6 +32,60 @@ if (REPLICATE_API_TOKEN) {
 interface ReplicateImageResult {
   url?: string;
   urls?: string[];
+}
+
+// Download image function
+async function downloadImage(url: string, filename: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Parse the URL and determine HTTP/HTTPS client
+    const parsedUrl = new URL(url);
+    const client = parsedUrl.protocol === 'https:' ? https : http;
+    
+    // Create 'images' directory if it doesn't exist
+    const imagesDir = path.join(process.cwd(), 'images');
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true });
+    }
+    
+    // Create file write stream
+    const filePath = path.join(imagesDir, filename);
+    const file = fs.createWriteStream(filePath);
+    
+    // Download and pipe to file
+    client.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`Failed to download image: ${response.statusCode} ${response.statusMessage}`));
+        return;
+      }
+      
+      response.pipe(file);
+      
+      file.on('finish', () => {
+        file.close();
+        resolve(filePath);
+      });
+      
+      file.on('error', (err) => {
+        fs.unlink(filePath, () => {}); // Delete the file on error
+        reject(err);
+      });
+    }).on('error', (err) => {
+      reject(err);
+    });
+  });
+}
+
+// Generate safe filename for images
+function generateImageFilename(prompt: string, index: number, format: string): string {
+  // Creates safe filename: imagen4_prompt_index_timestamp.ext
+  const safePrompt = prompt
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')  // Remove special characters
+    .replace(/\s+/g, '_')         // Replace spaces with underscores
+    .substring(0, 50);            // Limit length
+  
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `imagen4_${safePrompt}_${index}_${timestamp}.${format}`;
 }
 
 // Create MCP server
@@ -105,28 +163,65 @@ server.tool(
       }) as ReplicateImageResult;
 
       // Handle the output - it could be a single URL or an array of URLs
-      let imageUrl: string;
+      let imageUrls: string[] = [];
       if (typeof output === 'string') {
-        imageUrl = output;
+        imageUrls = [output];
       } else if (output.url) {
-        imageUrl = output.url;
+        imageUrls = [output.url];
       } else if (output.urls && output.urls.length > 0) {
-        imageUrl = output.urls[0];
+        imageUrls = output.urls;
       } else {
         throw new Error('No image URL returned from Replicate');
       }
 
-      const responseText = `Successfully generated image using Imagen 4 Ultra:
+      console.error("Downloading images locally...");
+      const downloadedImages = [];
 
-Image URL: ${imageUrl}
+      for (let i = 0; i < imageUrls.length; i++) {
+        const imageUrl = imageUrls[i];
+        const filename = generateImageFilename(prompt, i + 1, output_format);
+        
+        try {
+          const localPath = await downloadImage(imageUrl, filename);
+          downloadedImages.push({
+            url: imageUrl,
+            localPath,
+            index: i + 1
+          });
+          console.error(`Downloaded: ${filename}`);
+        } catch (downloadError) {
+          console.error(`Failed to download image ${i + 1}:`, downloadError);
+          // Graceful fallback - still provide original URL
+          downloadedImages.push({
+            url: imageUrl,
+            localPath: null,
+            index: i + 1,
+            error: downloadError instanceof Error ? downloadError.message : 'Unknown download error'
+          });
+        }
+      }
 
-Generation Details:
-- Prompt: "${prompt}"
-- Aspect Ratio: ${aspect_ratio}
-- Output Format: ${output_format}
-- Safety Filter Level: ${safety_filter_level}
+      let responseText = `Successfully generated ${downloadedImages.length} image(s) using Imagen 4 Ultra:
 
-The image is ready to view and download from the provided URL.`;
+Prompt: "${prompt}"
+Aspect Ratio: ${aspect_ratio}
+Output Format: ${output_format}
+Safety Filter Level: ${safety_filter_level}
+
+Generated Images:`;
+
+      downloadedImages.forEach((img) => {
+        responseText += `\nImage ${img.index}:`;
+        if (img.localPath) {
+          responseText += `\n  Local Path: ${img.localPath}`;
+        }
+        responseText += `\n  Original URL: ${img.url}`;
+        if (img.error) {
+          responseText += `\n  Download Error: ${img.error}`;
+        }
+      });
+
+      responseText += `\n\nImages have been downloaded to the local 'images' directory.`;
 
       return {
         content: [
@@ -234,40 +329,78 @@ server.tool(
       }) as ReplicateImageResult;
 
       // Handle the output - it could be a single URL or an array of URLs
-      let imageUrl: string;
+      let imageUrls: string[] = [];
       if (typeof output === 'string') {
-        imageUrl = output;
+        imageUrls = [output];
       } else if (output.url) {
-        imageUrl = output.url;
+        imageUrls = [output.url];
       } else if (output.urls && output.urls.length > 0) {
-        imageUrl = output.urls[0];
+        imageUrls = output.urls;
       } else {
         throw new Error('No image URL returned from Replicate');
       }
 
-      // Download and save the image
-      const response = await fetch(imageUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download image: ${response.statusText}`);
+      console.error("Downloading images locally...");
+      const downloadedImages = [];
+
+      // If user provided a specific filename, use it for the first image
+      // Otherwise, generate automatic filenames
+      for (let i = 0; i < imageUrls.length; i++) {
+        const imageUrl = imageUrls[i];
+        let targetFilename: string;
+        
+        if (i === 0 && filename !== "output.jpg") {
+          // Use user-provided filename for first image
+          targetFilename = filename;
+        } else {
+          // Generate automatic filename
+          targetFilename = generateImageFilename(prompt, i + 1, output_format);
+        }
+        
+        try {
+          const localPath = await downloadImage(imageUrl, targetFilename);
+          downloadedImages.push({
+            url: imageUrl,
+            localPath,
+            filename: targetFilename,
+            index: i + 1
+          });
+          console.error(`Downloaded: ${targetFilename}`);
+        } catch (downloadError) {
+          console.error(`Failed to download image ${i + 1}:`, downloadError);
+          // Graceful fallback - still provide original URL
+          downloadedImages.push({
+            url: imageUrl,
+            localPath: null,
+            filename: targetFilename,
+            index: i + 1,
+            error: downloadError instanceof Error ? downloadError.message : 'Unknown download error'
+          });
+        }
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      
-      await writeFile(filename, buffer);
+      let responseText = `Successfully generated and saved ${downloadedImages.length} image(s) using Imagen 4 Ultra:
 
-      const responseText = `Successfully generated and saved image using Imagen 4 Ultra:
+Prompt: "${prompt}"
+Aspect Ratio: ${aspect_ratio}
+Output Format: ${output_format}
+Safety Filter Level: ${safety_filter_level}
 
-Image URL: ${imageUrl}
-Saved to: ${filename}
+Generated Images:`;
 
-Generation Details:
-- Prompt: "${prompt}"
-- Aspect Ratio: ${aspect_ratio}
-- Output Format: ${output_format}
-- Safety Filter Level: ${safety_filter_level}
+      downloadedImages.forEach((img) => {
+        responseText += `\nImage ${img.index}:`;
+        if (img.localPath) {
+          responseText += `\n  Local Path: ${img.localPath}`;
+          responseText += `\n  Filename: ${img.filename}`;
+        }
+        responseText += `\n  Original URL: ${img.url}`;
+        if (img.error) {
+          responseText += `\n  Download Error: ${img.error}`;
+        }
+      });
 
-The image has been saved to disk and is ready to use.`;
+      responseText += `\n\nImages have been downloaded to the local 'images' directory.`;
 
       return {
         content: [

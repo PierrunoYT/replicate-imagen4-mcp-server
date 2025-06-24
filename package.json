@@ -1,7 +1,7 @@
 {
   "name": "replicate-imagen4-mcp-server",
-  "version": "1.0.0",
-  "description": "MCP server for Replicate Imagen 4 Ultra - High-quality AI image generation with Google's latest model",
+  "version": "2.1.0",
+  "description": "MCP server for Replicate Imagen 4 Ultra - High-quality AI image generation with automatic local download",
   "type": "module",
   "main": "build/index.js",
   "bin": {
