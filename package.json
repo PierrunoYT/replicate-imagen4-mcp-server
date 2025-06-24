@@ -1,0 +1,51 @@
+{
+  "name": "replicate-imagen4-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Replicate Imagen 4 Ultra - High-quality AI image generation with Google's latest model",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "replicate-imagen4": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "dev": "tsc --watch",
+    "start": "node build/index.js",
+    "test": "node test-server.js",
+    "get-path": "node get-path.js",
+    "example": "node example-usage.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PierrunoYT/replicate-imagen4-mcp-server.git"
+  },
+  "homepage": "https://github.com/PierrunoYT/replicate-imagen4-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/PierrunoYT/replicate-imagen4-mcp-server/issues"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "imagen4",
+    "replicate",
+    "image-generation",
+    "ai",
+    "google",
+    "typescript",
+    "model-context-protocol"
+  ],
+  "author": "PierrunoYT",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "replicate": "^0.34.1",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
