@@ -93,7 +93,7 @@ All generated images are automatically downloaded to your local machine for pers
 
 #### **1. Image Generation Flow**
 1. **API Call**: Server calls Replicate's Imagen 4 Ultra API
-2. **Response**: Replicate returns temporary URLs for generated images
+2. **Response**: Replicate returns an output object with URL method
 3. **Auto-Download**: Server immediately downloads images to local storage
 4. **Response**: Returns both local paths and original URLs
 
@@ -122,40 +122,6 @@ your-project/
 ✅ **Organized Storage**: All images in dedicated `images` directory
 ✅ **Unique Naming**: No filename conflicts with timestamp system
 ✅ **Fallback Safety**: Original URLs provided if download fails
-
-## Recent Improvements
-
-### v2.1.0 - Automatic Image Download
-
-- **📥 Auto-Download**: All generated images automatically downloaded to local storage
-- **📁 Smart Organization**: Images saved to dedicated 'images' directory with intelligent naming
-- **🔄 Dual Access**: Returns both local file paths and original URLs for maximum flexibility
-- **🛡️ Graceful Fallback**: Original URLs provided if download fails
-- **📝 Enhanced Responses**: Detailed information about local storage and download status
-
-### v2.0.0 - Enhanced Stability & Portability
-
-- **🔧 Fixed Connection Drops**: Resolved server crashes when API token is missing or invalid
-- **📦 Portable Installation**: Added npx support for installation-free usage from GitHub
-- **🛡️ Graceful Error Handling**: Server now handles errors gracefully without unexpected shutdowns
-- **⚡ Improved Reliability**: Enhanced connection stability and error recovery
-- **🌐 Universal Compatibility**: Works on any system with Node.js, no local setup required
-
-### 3. Clone or Download
-
-```bash
-git clone https://github.com/PierrunoYT/replicate-imagen4-mcp-server.git
-cd replicate-imagen4-mcp-server
-```
-
-### 4. Install Dependencies (Optional)
-
-The server is pre-built, but if you want to modify it:
-
-```bash
-npm install
-npm run build
-```
 
 ## Configuration
 
@@ -217,8 +183,8 @@ Generate images using Imagen 4 Ultra with automatic local download.
 **Parameters:**
 - `prompt` (required): Text prompt for image generation
 - `aspect_ratio` (optional): "1:1", "9:16", "16:9", "3:4", or "4:3" (default: "1:1")
-- `output_format` (optional): "jpg" or "png" (default: "jpg")
 - `safety_filter_level` (optional): "block_low_and_above", "block_medium_and_above", or "block_only_high" (default: "block_only_high")
+- `output_format` (optional): "jpg" or "png" (default: "jpg")
 
 **Features:**
 - **Automatic Download**: Images automatically saved to local 'images' directory
@@ -238,15 +204,14 @@ Generate images using Imagen 4 Ultra with custom filename support and automatic 
 
 **Parameters:**
 - `prompt` (required): Text prompt for image generation
-- `filename` (optional): Custom filename for the first image (default: auto-generated)
+- `filename` (optional): Custom filename for the image (default: auto-generated)
 - `aspect_ratio` (optional): "1:1", "9:16", "16:9", "3:4", or "4:3" (default: "1:1")
-- `output_format` (optional): "jpg" or "png" (default: "jpg")
 - `safety_filter_level` (optional): "block_low_and_above", "block_medium_and_above", or "block_only_high" (default: "block_only_high")
+- `output_format` (optional): "jpg" or "png" (default: "jpg")
 
 **Features:**
-- **Custom Naming**: Use your own filename for the first image
-- **Auto-Download**: All images automatically saved to 'images' directory
-- **Multiple Images**: Handles multiple generated images with smart naming
+- **Custom Naming**: Use your own filename for the image
+- **Auto-Download**: Images automatically saved to 'images' directory
 - **Dual Access**: Returns both local file paths and original URLs
 - **Error Resilience**: Graceful fallback if download fails
 
@@ -284,7 +249,7 @@ Generate and save an image of "A futuristic cityscape at night with neon lights 
 to "cityscape.jpg" with 16:9 aspect ratio
 ```
 
-### Using the Example Code
+### Using the Replicate API Directly
 
 Here's how to use the Replicate API directly in your own code:
 
@@ -300,6 +265,12 @@ const input = {
 };
 
 const output = await replicate.run("google/imagen-4-ultra", { input });
+
+// To access the file URL:
+console.log(output.url());
+//=> "https://replicate.delivery/.../output.jpg"
+
+// To write the file to disk:
 await writeFile("output.jpg", output);
 //=> output.jpg written to disk
 ```
@@ -430,6 +401,13 @@ MIT License - see [LICENSE](LICENSE) file for details.
 5. Submit a pull request
 
 ## Changelog
+
+### v2.1.1
+- **Updated API Integration**: Updated to use the latest Replicate API format with `.url()` method
+- **Simplified Code Architecture**: Removed complex polling logic in favor of direct API calls
+- **Enhanced Error Handling**: Improved error messages and graceful fallbacks
+- **Parameter Reordering**: Updated parameter order to match official Replicate API schema
+- **Code Cleanup**: Streamlined implementation for better maintainability
 
 ### v2.1.0
 - **Automatic Image Download**: All generated images now automatically downloaded to local storage

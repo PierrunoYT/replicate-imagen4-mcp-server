@@ -35,73 +35,9 @@ if (REPLICATE_API_TOKEN) {
   }
 }
 
-// Define types based on Replicate API
-interface ReplicateImageResult {
-  url?: string;
-  urls?: string[];
-}
-
-// Async prediction with polling function
-async function runPredictionWithPolling(
-  replicate: Replicate,
-  model: string,
-  input: any
-): Promise<any> {
-  let retryCount = 0;
-  
-  while (retryCount < MAX_RETRIES) {
-    try {
-      // Start the prediction (async)
-      console.error(`Starting prediction (attempt ${retryCount + 1})...`);
-      const prediction = await replicate.predictions.create({
-        model,
-        input
-      });
-      
-      console.error(`Prediction started with ID: ${prediction.id}`);
-      
-      // Poll for completion
-      let pollCount = 0;
-      const maxPolls = Math.ceil(MAX_POLL_TIME_MS / POLL_INTERVAL_MS);
-      
-      while (pollCount < maxPolls) {
-        const currentPrediction = await replicate.predictions.get(prediction.id);
-        
-        console.error(`Poll ${pollCount + 1}: Status = ${currentPrediction.status}`);
-        
-        if (currentPrediction.status === 'succeeded') {
-          return currentPrediction.output;
-        }
-        
-        if (currentPrediction.status === 'failed') {
-          throw new Error(`Prediction failed: ${currentPrediction.error || 'Unknown error'}`);
-        }
-        
-        if (currentPrediction.status === 'canceled') {
-          throw new Error('Prediction was canceled');
-        }
-        
-        // Wait before next poll with exponential backoff
-        const backoffDelay = POLL_INTERVAL_MS * Math.pow(EXPONENTIAL_BACKOFF_BASE, Math.min(pollCount, 5));
-        await new Promise(resolve => setTimeout(resolve, Math.min(backoffDelay, 10000))); // Cap at 10s
-        pollCount++;
-      }
-      
-      throw new Error('Prediction timed out after maximum polling time');
-      
-    } catch (error) {
-      retryCount++;
-      
-      if (retryCount >= MAX_RETRIES) {
-        throw error;
-      }
-      
-      console.error(`Attempt ${retryCount} failed, retrying in ${RETRY_DELAY_MS}ms...`, error);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-    }
-  }
-  
-  throw new Error('Failed to complete prediction after all retries');
+// Define types based on new Replicate API
+interface ReplicateImageOutput {
+  url(): string;
 }
 
 // Download image function
@@ -161,7 +97,7 @@ function generateImageFilename(prompt: string, index: number, format: string): s
 // Create MCP server
 const server = new McpServer({
   name: "replicate-imagen4-server",
-  version: "1.0.0",
+  version: "2.1.1",
 });
 
 // Tool: Generate images with Imagen 4 Ultra
@@ -182,17 +118,17 @@ server.tool(
           description: "Aspect ratio of the generated image",
           default: "1:1"
         },
+        safety_filter_level: {
+          type: "string",
+          enum: ["block_low_and_above", "block_medium_and_above", "block_only_high"],
+          description: "block_low_and_above is strictest, block_medium_and_above blocks some prompts, block_only_high is most permissive but some prompts will still be blocked",
+          default: "block_only_high"
+        },
         output_format: {
           type: "string",
           enum: ["jpg", "png"],
           description: "Format of the output image",
           default: "jpg"
-        },
-        safety_filter_level: {
-          type: "string",
-          enum: ["block_low_and_above", "block_medium_and_above", "block_only_high"],
-          description: "Safety filter level - block_low_and_above is strictest, block_medium_and_above blocks some prompts, block_only_high is most permissive",
-          default: "block_only_high"
         }
       },
       required: ["prompt"]
@@ -222,87 +158,75 @@ server.tool(
 
       console.error(`Generating image with prompt: "${prompt}"`);
 
-      // Call Replicate Imagen 4 Ultra API with async polling
-      const output = await runPredictionWithPolling(
-        replicate,
-        "google/imagen-4-ultra",
-        {
+      // Call Replicate Imagen 4 Ultra API
+      const output = await replicate.run("google/imagen-4-ultra", {
+        input: {
           prompt,
           aspect_ratio,
           output_format,
           safety_filter_level
         }
-      ) as ReplicateImageResult;
+      }) as ReplicateImageOutput;
 
-      // Handle the output - it could be a single URL or an array of URLs
-      let imageUrls: string[] = [];
-      if (typeof output === 'string') {
-        imageUrls = [output];
-      } else if (output.url) {
-        imageUrls = [output.url];
-      } else if (output.urls && output.urls.length > 0) {
-        imageUrls = output.urls;
-      } else {
-        throw new Error('No image URL returned from Replicate');
-      }
+      // Get the image URL using the new API
+      const imageUrl = output.url();
+      console.error(`Generated image URL: ${imageUrl}`);
 
-      console.error("Downloading images locally...");
-      const downloadedImages = [];
+      // Generate filename and download
+      const filename = generateImageFilename(prompt, 1, output_format);
+      
+      try {
+        const localPath = await downloadImage(imageUrl, filename);
+        console.error(`Downloaded: ${filename}`);
 
-      for (let i = 0; i < imageUrls.length; i++) {
-        const imageUrl = imageUrls[i];
-        const filename = generateImageFilename(prompt, i + 1, output_format);
-        
-        try {
-          const localPath = await downloadImage(imageUrl, filename);
-          downloadedImages.push({
-            url: imageUrl,
-            localPath,
-            index: i + 1
-          });
-          console.error(`Downloaded: ${filename}`);
-        } catch (downloadError) {
-          console.error(`Failed to download image ${i + 1}:`, downloadError);
-          // Graceful fallback - still provide original URL
-          downloadedImages.push({
-            url: imageUrl,
-            localPath: null,
-            index: i + 1,
-            error: downloadError instanceof Error ? downloadError.message : 'Unknown download error'
-          });
-        }
-      }
-
-      let responseText = `Successfully generated ${downloadedImages.length} image(s) using Imagen 4 Ultra:
+        const responseText = `Successfully generated image using Imagen 4 Ultra:
 
 Prompt: "${prompt}"
 Aspect Ratio: ${aspect_ratio}
 Output Format: ${output_format}
 Safety Filter Level: ${safety_filter_level}
 
-Generated Images:`;
+Generated Image:
+  Local Path: ${localPath}
+  Original URL: ${imageUrl}
 
-      downloadedImages.forEach((img) => {
-        responseText += `\nImage ${img.index}:`;
-        if (img.localPath) {
-          responseText += `\n  Local Path: ${img.localPath}`;
-        }
-        responseText += `\n  Original URL: ${img.url}`;
-        if (img.error) {
-          responseText += `\n  Download Error: ${img.error}`;
-        }
-      });
+Image has been downloaded to the local 'images' directory.`;
 
-      responseText += `\n\nImages have been downloaded to the local 'images' directory.`;
+        return {
+          content: [
+            {
+              type: "text",
+              text: responseText
+            }
+          ]
+        };
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: responseText
-          }
-        ]
-      };
+      } catch (downloadError) {
+        console.error(`Failed to download image:`, downloadError);
+        
+        // Graceful fallback - still provide original URL
+        const responseText = `Successfully generated image using Imagen 4 Ultra:
+
+Prompt: "${prompt}"
+Aspect Ratio: ${aspect_ratio}
+Output Format: ${output_format}
+Safety Filter Level: ${safety_filter_level}
+
+Generated Image:
+  Original URL: ${imageUrl}
+  Download Error: ${downloadError instanceof Error ? downloadError.message : 'Unknown download error'}
+
+Note: Image generation succeeded but local download failed. You can access the image via the URL above.`;
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: responseText
+            }
+          ]
+        };
+      }
 
     } catch (error) {
       console.error('Error generating image:', error);
@@ -349,17 +273,17 @@ server.tool(
           description: "Aspect ratio of the generated image",
           default: "1:1"
         },
+        safety_filter_level: {
+          type: "string",
+          enum: ["block_low_and_above", "block_medium_and_above", "block_only_high"],
+          description: "block_low_and_above is strictest, block_medium_and_above blocks some prompts, block_only_high is most permissive but some prompts will still be blocked",
+          default: "block_only_high"
+        },
         output_format: {
           type: "string",
           enum: ["jpg", "png"],
           description: "Format of the output image",
           default: "jpg"
-        },
-        safety_filter_level: {
-          type: "string",
-          enum: ["block_low_and_above", "block_medium_and_above", "block_only_high"],
-          description: "Safety filter level - block_low_and_above is strictest, block_medium_and_above blocks some prompts, block_only_high is most permissive",
-          default: "block_only_high"
         }
       },
       required: ["prompt"]
@@ -390,100 +314,76 @@ server.tool(
 
       console.error(`Generating and saving image with prompt: "${prompt}"`);
 
-      // Call Replicate Imagen 4 Ultra API with async polling
-      const output = await runPredictionWithPolling(
-        replicate,
-        "google/imagen-4-ultra",
-        {
+      // Call Replicate Imagen 4 Ultra API
+      const output = await replicate.run("google/imagen-4-ultra", {
+        input: {
           prompt,
           aspect_ratio,
           output_format,
           safety_filter_level
         }
-      ) as ReplicateImageResult;
+      }) as ReplicateImageOutput;
 
-      // Handle the output - it could be a single URL or an array of URLs
-      let imageUrls: string[] = [];
-      if (typeof output === 'string') {
-        imageUrls = [output];
-      } else if (output.url) {
-        imageUrls = [output.url];
-      } else if (output.urls && output.urls.length > 0) {
-        imageUrls = output.urls;
-      } else {
-        throw new Error('No image URL returned from Replicate');
-      }
+      // Get the image URL using the new API
+      const imageUrl = output.url();
+      console.error(`Generated image URL: ${imageUrl}`);
 
-      console.error("Downloading images locally...");
-      const downloadedImages = [];
+      // Use provided filename or generate one
+      const targetFilename = filename !== "output.jpg" ? filename : generateImageFilename(prompt, 1, output_format);
+      
+      try {
+        const localPath = await downloadImage(imageUrl, targetFilename);
+        console.error(`Downloaded: ${targetFilename}`);
 
-      // If user provided a specific filename, use it for the first image
-      // Otherwise, generate automatic filenames
-      for (let i = 0; i < imageUrls.length; i++) {
-        const imageUrl = imageUrls[i];
-        let targetFilename: string;
-        
-        if (i === 0 && filename !== "output.jpg") {
-          // Use user-provided filename for first image
-          targetFilename = filename;
-        } else {
-          // Generate automatic filename
-          targetFilename = generateImageFilename(prompt, i + 1, output_format);
-        }
-        
-        try {
-          const localPath = await downloadImage(imageUrl, targetFilename);
-          downloadedImages.push({
-            url: imageUrl,
-            localPath,
-            filename: targetFilename,
-            index: i + 1
-          });
-          console.error(`Downloaded: ${targetFilename}`);
-        } catch (downloadError) {
-          console.error(`Failed to download image ${i + 1}:`, downloadError);
-          // Graceful fallback - still provide original URL
-          downloadedImages.push({
-            url: imageUrl,
-            localPath: null,
-            filename: targetFilename,
-            index: i + 1,
-            error: downloadError instanceof Error ? downloadError.message : 'Unknown download error'
-          });
-        }
-      }
-
-      let responseText = `Successfully generated and saved ${downloadedImages.length} image(s) using Imagen 4 Ultra:
+        const responseText = `Successfully generated and saved image using Imagen 4 Ultra:
 
 Prompt: "${prompt}"
 Aspect Ratio: ${aspect_ratio}
 Output Format: ${output_format}
 Safety Filter Level: ${safety_filter_level}
 
-Generated Images:`;
+Generated Image:
+  Local Path: ${localPath}
+  Filename: ${targetFilename}
+  Original URL: ${imageUrl}
 
-      downloadedImages.forEach((img) => {
-        responseText += `\nImage ${img.index}:`;
-        if (img.localPath) {
-          responseText += `\n  Local Path: ${img.localPath}`;
-          responseText += `\n  Filename: ${img.filename}`;
-        }
-        responseText += `\n  Original URL: ${img.url}`;
-        if (img.error) {
-          responseText += `\n  Download Error: ${img.error}`;
-        }
-      });
+Image has been downloaded to the local 'images' directory.`;
 
-      responseText += `\n\nImages have been downloaded to the local 'images' directory.`;
+        return {
+          content: [
+            {
+              type: "text",
+              text: responseText
+            }
+          ]
+        };
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: responseText
-          }
-        ]
-      };
+      } catch (downloadError) {
+        console.error(`Failed to download image:`, downloadError);
+        
+        // Graceful fallback - still provide original URL
+        const responseText = `Successfully generated image using Imagen 4 Ultra:
+
+Prompt: "${prompt}"
+Aspect Ratio: ${aspect_ratio}
+Output Format: ${output_format}
+Safety Filter Level: ${safety_filter_level}
+
+Generated Image:
+  Original URL: ${imageUrl}
+  Download Error: ${downloadError instanceof Error ? downloadError.message : 'Unknown download error'}
+
+Note: Image generation succeeded but local download failed. You can access the image via the URL above.`;
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: responseText
+            }
+          ]
+        };
+      }
 
     } catch (error) {
       console.error('Error generating and saving image:', error);
@@ -540,24 +440,20 @@ server.tool(
         };
       }
 
-      console.error(`Getting prediction status for: ${prediction_id}`);
+      console.error(`Getting prediction status for ID: ${prediction_id}`);
 
+      // Get prediction from Replicate
       const prediction = await replicate.predictions.get(prediction_id);
 
-      const responseText = `Prediction Status:
+      const responseText = `Prediction Status for ID: ${prediction_id}
 
-ID: ${prediction.id}
 Status: ${prediction.status}
-Model: ${prediction.model}
 Created: ${prediction.created_at}
+${prediction.started_at ? `Started: ${prediction.started_at}` : ''}
 ${prediction.completed_at ? `Completed: ${prediction.completed_at}` : ''}
 
-${prediction.input ? `Input: ${JSON.stringify(prediction.input, null, 2)}` : ''}
-
-${prediction.output ? `Output: ${JSON.stringify(prediction.output, null, 2)}` : ''}
-
-${prediction.error ? `Error: ${prediction.error}` : ''}
-
+${prediction.status === 'succeeded' && prediction.output ? `Output: ${JSON.stringify(prediction.output, null, 2)}` : ''}
+${prediction.status === 'failed' && prediction.error ? `Error: ${prediction.error}` : ''}
 ${prediction.logs ? `Logs: ${prediction.logs}` : ''}`;
 
       return {
@@ -616,6 +512,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Server error:', error);
+  console.error('Unhandled error:', error);
   process.exit(1);
 });
