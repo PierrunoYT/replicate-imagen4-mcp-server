@@ -399,35 +399,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 3. Make your changes
 4. Test with `npm run test`
 5. Submit a pull request
-
-## Changelog
-
-### v2.1.1
-- **Updated API Integration**: Updated to use the latest Replicate API format with `.url()` method
-- **Simplified Code Architecture**: Removed complex polling logic in favor of direct API calls
-- **Enhanced Error Handling**: Improved error messages and graceful fallbacks
-- **Parameter Reordering**: Updated parameter order to match official Replicate API schema
-- **Code Cleanup**: Streamlined implementation for better maintainability
-
-### v2.1.0
-- **Automatic Image Download**: All generated images now automatically downloaded to local storage
-- **Smart File Organization**: Images saved to dedicated 'images' directory with intelligent naming
-- **Enhanced Responses**: Detailed information about local storage paths and download status
-- **Dual Access**: Returns both local file paths and original URLs for maximum flexibility
-- **Error Resilience**: Graceful fallback with original URLs if download fails
-- **Improved User Experience**: No manual download steps required
-
-### v2.0.0
-- Enhanced stability and portability
-- Fixed connection drops and server crashes
-- Added npx support for installation-free usage
-- Graceful error handling improvements
-- Enhanced connection stability and error recovery
-
-### v1.0.0
-- Initial release with Replicate integration
-- Support for Imagen 4 Ultra via Replicate
-- Image generation and file saving capabilities
-- Prediction status tracking
-- Comprehensive error handling and logging
-- Pre-built executable for immediate use
