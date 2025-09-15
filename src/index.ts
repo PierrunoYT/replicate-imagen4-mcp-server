@@ -9,6 +9,13 @@ import * as path from "path";
 import * as http from "http";
 import * as https from "https";
 
+// Retry and polling configuration for API calls
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
+const POLL_INTERVAL_MS = 3000; // 3 seconds between status checks
+const MAX_POLL_TIME_MS = 600000; // 10 minutes max wait time
+const EXPONENTIAL_BACKOFF_BASE = 1.5;
+
 // Check for required environment variable
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 if (!REPLICATE_API_TOKEN) {
@@ -32,6 +39,69 @@ if (REPLICATE_API_TOKEN) {
 interface ReplicateImageResult {
   url?: string;
   urls?: string[];
+}
+
+// Async prediction with polling function
+async function runPredictionWithPolling(
+  replicate: Replicate,
+  model: string,
+  input: any
+): Promise<any> {
+  let retryCount = 0;
+  
+  while (retryCount < MAX_RETRIES) {
+    try {
+      // Start the prediction (async)
+      console.error(`Starting prediction (attempt ${retryCount + 1})...`);
+      const prediction = await replicate.predictions.create({
+        model,
+        input
+      });
+      
+      console.error(`Prediction started with ID: ${prediction.id}`);
+      
+      // Poll for completion
+      let pollCount = 0;
+      const maxPolls = Math.ceil(MAX_POLL_TIME_MS / POLL_INTERVAL_MS);
+      
+      while (pollCount < maxPolls) {
+        const currentPrediction = await replicate.predictions.get(prediction.id);
+        
+        console.error(`Poll ${pollCount + 1}: Status = ${currentPrediction.status}`);
+        
+        if (currentPrediction.status === 'succeeded') {
+          return currentPrediction.output;
+        }
+        
+        if (currentPrediction.status === 'failed') {
+          throw new Error(`Prediction failed: ${currentPrediction.error || 'Unknown error'}`);
+        }
+        
+        if (currentPrediction.status === 'canceled') {
+          throw new Error('Prediction was canceled');
+        }
+        
+        // Wait before next poll with exponential backoff
+        const backoffDelay = POLL_INTERVAL_MS * Math.pow(EXPONENTIAL_BACKOFF_BASE, Math.min(pollCount, 5));
+        await new Promise(resolve => setTimeout(resolve, Math.min(backoffDelay, 10000))); // Cap at 10s
+        pollCount++;
+      }
+      
+      throw new Error('Prediction timed out after maximum polling time');
+      
+    } catch (error) {
+      retryCount++;
+      
+      if (retryCount >= MAX_RETRIES) {
+        throw error;
+      }
+      
+      console.error(`Attempt ${retryCount} failed, retrying in ${RETRY_DELAY_MS}ms...`, error);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+  
+  throw new Error('Failed to complete prediction after all retries');
 }
 
 // Download image function
@@ -152,15 +222,17 @@ server.tool(
 
       console.error(`Generating image with prompt: "${prompt}"`);
 
-      // Call Replicate Imagen 4 Ultra API
-      const output = await replicate.run("google/imagen-4-ultra", {
-        input: {
+      // Call Replicate Imagen 4 Ultra API with async polling
+      const output = await runPredictionWithPolling(
+        replicate,
+        "google/imagen-4-ultra",
+        {
           prompt,
           aspect_ratio,
           output_format,
           safety_filter_level
         }
-      }) as ReplicateImageResult;
+      ) as ReplicateImageResult;
 
       // Handle the output - it could be a single URL or an array of URLs
       let imageUrls: string[] = [];
@@ -318,15 +390,17 @@ server.tool(
 
       console.error(`Generating and saving image with prompt: "${prompt}"`);
 
-      // Call Replicate Imagen 4 Ultra API
-      const output = await replicate.run("google/imagen-4-ultra", {
-        input: {
+      // Call Replicate Imagen 4 Ultra API with async polling
+      const output = await runPredictionWithPolling(
+        replicate,
+        "google/imagen-4-ultra",
+        {
           prompt,
           aspect_ratio,
           output_format,
           safety_filter_level
         }
-      }) as ReplicateImageResult;
+      ) as ReplicateImageResult;
 
       // Handle the output - it could be a single URL or an array of URLs
       let imageUrls: string[] = [];

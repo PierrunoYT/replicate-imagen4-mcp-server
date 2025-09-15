@@ -1,0 +1,17 @@
+Fix Replicate API connection closed error 32400
+
+Replaced synchronous replicate.run() calls with asynchronous polling pattern
+to handle long-running image generation tasks properly.
+
+Changes:
+- Implemented runPredictionWithPolling() function for async predictions
+- Added exponential backoff polling with 3-second intervals
+- Replaced timeout-prone synchronous calls in both generate tools
+- Enhanced retry logic for prediction creation and status polling
+- Set 10-minute maximum wait time for complex generations
+
+This eliminates connection timeouts and provides much more reliable
+API interaction for Imagen 4 Ultra model.
+
+🤖 Generated with Codebuff
+Co-Authored-By: Codebuff <noreply@codebuff.com>
